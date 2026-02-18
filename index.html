@@ -1,0 +1,1844 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>MapGroupProto Coordinate Editor</title>
+  <style>
+    :root {
+      --bg: #f4efe6;
+      --panel: #fffef8;
+      --ink: #1c2b2d;
+      --muted: #5a686b;
+      --accent: #1f8a70;
+      --accent-2: #c45b36;
+      --line: #d8d2c8;
+      --grid: #e7e1d7;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: "Trebuchet MS", "Segoe UI", sans-serif;
+      color: var(--ink);
+      background:
+        radial-gradient(circle at 25% -10%, #fff4d9 0%, transparent 28%),
+        radial-gradient(circle at 95% 0%, #d9efe7 0%, transparent 35%),
+        var(--bg);
+      min-height: 100vh;
+      height: 100vh;
+      overflow: hidden;
+    }
+    .app {
+      display: grid;
+      grid-template-columns: 360px 1fr;
+      gap: 14px;
+      padding: 14px;
+      height: 100vh;
+      min-height: 0;
+    }
+    .panel, .canvas-panel {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      box-shadow: 0 5px 16px rgba(28, 43, 45, 0.08);
+    }
+    .panel {
+      padding: 12px;
+      overflow: auto;
+      min-height: 0;
+    }
+    h1 {
+      margin: 0 0 10px;
+      font-size: 18px;
+      letter-spacing: 0.2px;
+    }
+    .help {
+      margin: 0 0 12px;
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.35;
+    }
+    .row {
+      display: grid;
+      gap: 8px;
+      margin-bottom: 10px;
+    }
+    label {
+      font-size: 12px;
+      color: var(--muted);
+      font-weight: 600;
+    }
+    input[type="file"], select, input[type="number"], textarea, button {
+      width: 100%;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 8px 9px;
+      font-size: 13px;
+      background: #fff;
+      color: var(--ink);
+    }
+    textarea {
+      min-height: 100px;
+      resize: vertical;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    }
+    .btn-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+    }
+    button {
+      cursor: pointer;
+      background: var(--accent);
+      color: #fff;
+      border-color: transparent;
+      font-weight: 600;
+      transition: transform 120ms ease, filter 120ms ease;
+    }
+    button:hover { filter: brightness(0.95); }
+    button:active { transform: translateY(1px); }
+    button.alt {
+      background: var(--accent-2);
+    }
+    button.ghost {
+      background: #fff;
+      color: var(--ink);
+      border-color: var(--line);
+    }
+    .split-3 {
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr;
+      gap: 8px;
+    }
+    .split-2 {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+    }
+    .status {
+      font-size: 12px;
+      color: var(--muted);
+      min-height: 16px;
+    }
+    .canvas-panel {
+      padding: 8px;
+      display: grid;
+      grid-template-rows: auto 1fr auto;
+      gap: 8px;
+      position: relative;
+      min-height: 0;
+      overflow: hidden;
+    }
+    .canvas-head {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 2px 5px;
+      font-size: 13px;
+      color: var(--muted);
+    }
+    .canvas-grid {
+      display: grid;
+      grid-template-columns: 1fr 340px;
+      gap: 8px;
+      min-height: 0;
+      height: 100%;
+    }
+    .canvas-grid canvas {
+      width: 100%;
+      height: 100%;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      min-height: 0;
+    }
+    #canvas2d {
+      background:
+        linear-gradient(0deg, rgba(231, 225, 215, 0.45) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(231, 225, 215, 0.45) 1px, transparent 1px),
+        #fffefb;
+      background-size: 24px 24px;
+    }
+    #canvas3d {
+      background: linear-gradient(180deg, #f9f3e8 0%, #fffdfa 100%);
+      cursor: grab;
+    }
+    #canvas3d:active {
+      cursor: grabbing;
+    }
+    .sidebar {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #fffefb;
+      display: grid;
+      grid-template-rows: auto 1fr;
+      min-height: 400px;
+      height: 100%;
+      overflow: hidden;
+    }
+    .sidebar-tabs {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 6px;
+      padding: 8px;
+      border-bottom: 1px solid var(--line);
+      background: #f8f4eb;
+    }
+    .tab-btn {
+      border: 1px solid var(--line);
+      background: #fff;
+      color: var(--ink);
+      border-radius: 8px;
+      padding: 7px 8px;
+      font-size: 12px;
+      font-weight: 700;
+      cursor: pointer;
+    }
+    .tab-btn.active {
+      background: var(--accent);
+      color: #fff;
+      border-color: transparent;
+    }
+    .sidebar-pane {
+      padding: 8px;
+      overflow: auto;
+      display: grid;
+      gap: 8px;
+      align-content: start;
+    }
+    .side-title {
+      font-size: 12px;
+      color: var(--muted);
+      font-weight: 700;
+      letter-spacing: 0.2px;
+      margin: 0;
+    }
+    .point-list {
+      list-style: none;
+      padding: 0;
+      margin: 0;
+      display: grid;
+      gap: 0;
+      max-height: 260px;
+      overflow: auto;
+    }
+    .point-list li {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 6px;
+      align-items: center;
+      margin: 0;
+    }
+    .point-list button.select-btn {
+      width: 100%;
+      text-align: left;
+      background: #fff;
+      color: var(--ink);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 6px 8px;
+      font-size: 12px;
+      cursor: pointer;
+    }
+    .point-list button.select-btn.active {
+      border-color: var(--accent);
+      box-shadow: inset 0 0 0 1px var(--accent);
+      background: #eef8f4;
+    }
+    .point-list button.delete-row-btn {
+      width: auto;
+      padding: 4px 7px;
+      font-size: 11px;
+      background: #fff;
+      color: var(--accent-2);
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      cursor: pointer;
+    }
+    .point-list button {
+      position: relative;
+      z-index: 2;
+      pointer-events: auto;
+    }
+    .list-pane-layout {
+      display: grid;
+      grid-template-rows: auto auto 1fr auto auto;
+      gap: 8px;
+      min-height: 100%;
+    }
+    .object-preview {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 8px;
+      background: #fff;
+      display: grid;
+      gap: 6px;
+    }
+    .object-preview img {
+      width: 100%;
+      max-height: 180px;
+      object-fit: contain;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      background: #faf7ef;
+      cursor: zoom-in;
+    }
+    .object-preview .meta {
+      font-size: 12px;
+      color: var(--ink);
+      line-height: 1.3;
+    }
+    .object-preview-wrap {
+      margin-top: auto;
+      align-self: end;
+    }
+    .legend {
+      font-size: 12px;
+      color: var(--muted);
+      padding: 0 4px 4px;
+    }
+    .controls-overlay {
+      position: absolute;
+      left: 16px;
+      top: 48px;
+      background: rgba(255, 254, 248, 0.92);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 8px 10px;
+      font-size: 12px;
+      color: var(--ink);
+      max-width: 340px;
+      line-height: 1.3;
+      box-shadow: 0 4px 12px rgba(28, 43, 45, 0.1);
+      pointer-events: none;
+    }
+    .field {
+      display: grid;
+      gap: 3px;
+    }
+    .field span {
+      font-size: 11px;
+      color: var(--muted);
+      font-weight: 700;
+      letter-spacing: 0.2px;
+    }
+    .image-modal {
+      position: fixed;
+      inset: 0;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      background: rgba(19, 26, 27, 0.72);
+      z-index: 30;
+      padding: 28px;
+    }
+    .image-modal.open {
+      display: flex;
+    }
+    .image-modal-content {
+      position: relative;
+      max-width: min(92vw, 1200px);
+      max-height: 88vh;
+      border-radius: 10px;
+      border: 1px solid var(--line);
+      background: #fff;
+      padding: 10px;
+      box-shadow: 0 16px 40px rgba(10, 18, 20, 0.35);
+    }
+    .image-modal img {
+      max-width: min(90vw, 1180px);
+      max-height: calc(88vh - 20px);
+      object-fit: contain;
+      display: block;
+      border-radius: 6px;
+      background: #faf7ef;
+    }
+    .image-modal-close {
+      position: absolute;
+      top: 8px;
+      right: 8px;
+      width: auto;
+      padding: 4px 8px;
+      line-height: 1;
+      font-size: 18px;
+      font-weight: 700;
+      background: rgba(255, 255, 255, 0.92);
+      color: var(--ink);
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      cursor: pointer;
+    }
+    @media (max-width: 950px) {
+      body {
+        height: auto;
+        overflow: auto;
+      }
+      .app {
+        grid-template-columns: 1fr;
+        height: auto;
+        min-height: 100vh;
+      }
+      .canvas-grid {
+        grid-template-columns: 1fr;
+      }
+      .canvas-grid canvas { min-height: 34vh; }
+      .sidebar { min-height: 260px; height: auto; }
+    }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <section class="panel">
+      <h1>MapGroupProto Coordinate Editor</h1>
+      <p class="help">Search for a building group and edit points, or load your own XML file to replace the current dataset.</p>
+
+      <div class="row">
+        <label for="xmlFile">Load your own mapgroup XML (replace current)</label>
+        <input id="xmlFile" type="file" accept=".xml,text/xml,application/xml">
+        <button id="reloadDefaultsBtn" class="ghost" type="button">Reload Default List</button>
+      </div>
+
+      <div class="row">
+        <label for="xmlText">Or paste XML here (replace current merged set)</label>
+        <textarea id="xmlText" placeholder="Paste mapgroupproto XML..."></textarea>
+        <button id="loadTextBtn" class="ghost" type="button">Load Pasted XML</button>
+      </div>
+
+      <div class="row">
+        <label for="groupSearchInput">Search groups</label>
+        <input id="groupSearchInput" type="text" placeholder="Type to filter by group name...">
+      </div>
+
+      <div class="row">
+        <label for="groupSelect">Group</label>
+        <select id="groupSelect"></select>
+      </div>
+      <div class="row">
+        <label for="containerSelect">Container</label>
+        <select id="containerSelect"></select>
+      </div>
+
+      <div class="row">
+        <label>Selected point</label>
+        <div class="split-3">
+          <label class="field"><span>X</span><input id="xInput" type="number" step="0.001" placeholder="X"></label>
+          <label class="field"><span>Y</span><input id="yInput" type="number" step="0.001" placeholder="Y"></label>
+          <label class="field"><span>Z</span><input id="zInput" type="number" step="0.001" placeholder="Z"></label>
+        </div>
+        <div class="split-2">
+          <label class="field"><span>Range</span><input id="rangeInput" type="number" step="0.001" placeholder="range"></label>
+          <label class="field"><span>Height</span><input id="heightInput" type="number" step="0.001" placeholder="height"></label>
+        </div>
+        <label class="field"><span>Flags (optional)</span><input id="flagsInput" type="text" placeholder="flags (optional)"></label>
+      </div>
+
+      <div class="row btn-row">
+        <button id="addPointBtn" type="button">Add Point (Center)</button>
+        <button id="deletePointBtn" class="alt" type="button">Delete Point</button>
+      </div>
+
+      <div class="row">
+        <label for="snapInput">Drag snap</label>
+        <input id="snapInput" type="number" value="0.01" step="0.01" min="0">
+      </div>
+      <div class="row btn-row">
+        <button id="undoBtn" class="ghost" type="button">Undo (Ctrl+Z)</button>
+        <button id="fit3dBtn" class="ghost" type="button">Refit 3D Camera</button>
+      </div>
+      <div class="row">
+        <label>Virtual room</label>
+        <div class="split-3">
+          <input id="roomWidthInput" type="number" value="20" min="1" step="0.5" placeholder="width X">
+          <input id="roomHeightInput" type="number" value="6" min="1" step="0.25" placeholder="height Y">
+          <input id="roomDepthInput" type="number" value="20" min="1" step="0.5" placeholder="depth Z">
+        </div>
+        <div class="split-2">
+          <label><input id="roomEnabledInput" type="checkbox" checked> Show room context</label>
+          <label><input id="roomClampInput" type="checkbox" checked> Clamp edits to room bounds</label>
+        </div>
+      </div>
+
+      <div class="row btn-row">
+        <button id="exportPointsBtn" class="ghost" type="button">Export Selected Entry</button>
+        <button id="downloadXmlBtn" type="button">Download Updated XML</button>
+      </div>
+
+      <div class="row">
+        <label for="outputText">Output</label>
+        <textarea id="outputText" placeholder="Exported output appears here"></textarea>
+      </div>
+
+      <div class="status" id="status"></div>
+    </section>
+
+    <section class="canvas-panel">
+      <div class="canvas-head">
+        <strong id="canvasTitle">No container selected</strong>
+        <span id="pointCount">0 points</span>
+      </div>
+      <div class="canvas-grid" id="canvasGrid">
+        <canvas id="canvas3d"></canvas>
+        <aside class="sidebar">
+          <div class="sidebar-tabs">
+            <button id="listTabBtn" class="tab-btn active" type="button">List view</button>
+            <button id="view2dTabBtn" class="tab-btn" type="button">2D view</button>
+          </div>
+          <div id="listViewPane" class="sidebar-pane list-pane-layout">
+            <p class="side-title">Points</p>
+            <button id="addPointListBtn" class="ghost" type="button">Add Point (Center)</button>
+            <ul id="pointList" class="point-list"></ul>
+            <p class="side-title object-preview-wrap">Object Preview</p>
+            <div id="objectPreview" class="object-preview">
+              <div class="meta">No object selected.</div>
+            </div>
+          </div>
+          <div id="view2dPane" class="sidebar-pane" style="display:none">
+            <canvas id="canvas2d"></canvas>
+          </div>
+        </aside>
+      </div>
+      <div class="controls-overlay">Controls: Orbit = drag. Zoom = wheel. Hold Ctrl to edit. Ctrl+drag point moves X/Z. Ctrl+Shift+drag moves Y. Ctrl+drag axis arrow locks axis. Ctrl+click empty adds. Ctrl+right-click deletes. Ctrl+Z undo.</div>
+      <div class="legend">3D main view: left-drag orbit, wheel zoom. Edit with Ctrl: Ctrl+drag point moves X/Z, Ctrl+Shift+drag point edits Y, Ctrl+drag gizmo arrow locks to that axis, Ctrl+click empty adds, Ctrl+right-click deletes.</div>
+    </section>
+  </div>
+  <div id="imageModal" class="image-modal" aria-hidden="true">
+    <div id="imageModalContent" class="image-modal-content">
+      <button id="imageModalCloseBtn" class="image-modal-close" type="button" aria-label="Close image overlay">&times;</button>
+      <img id="imageModalImg" alt="Object preview">
+    </div>
+  </div>
+
+  <script src="mapgroupproto-merged.js"></script>
+  <script src="mapgroup-object-links.js"></script>
+  <script>
+    const DEFAULT_MAPGROUP_FILE = "mapgroupproto-merged.xml";
+
+    const state = {
+      xmlDoc: null,
+      filename: "mapgroupproto-merged.xml",
+      currentGroup: null,
+      currentContainer: null,
+      points: [],
+      sidebarMode: "list",
+      filteredGroupIndices: [],
+      undoStack: [],
+      selectedIdx: -1,
+      draggingIdx: -1,
+      dragUndoPushed2d: false,
+      dragOffset: { x: 0, z: 0 },
+      view: { minX: -5, maxX: 5, minY: -2, maxY: 2, minZ: -5, maxZ: 5, scale: 10, pad: 40 },
+      room: {
+        enabled: true,
+        clamp: true,
+        width: 20,
+        height: 6,
+        depth: 20,
+        floorY: 0,
+        centerX: 0,
+        centerZ: 0
+      },
+      view3d: {
+        yaw: -0.9,
+        pitch: -0.95,
+        distance: 24,
+        autoFit: true,
+        targetX: 0,
+        targetY: 0,
+        targetZ: 0,
+        draggingCamera: false,
+        draggingPoint: false,
+        dragUndoPushed3d: false,
+        dragPointIdx: -1,
+        dragMode: "plane",
+        dragPlaneY: 0,
+        dragStart: null,
+        axisBase: null,
+        axisDir: null,
+        axisGrabT: 0,
+        hoverAxisMode: null,
+        lastX: 0,
+        lastY: 0
+      }
+    };
+
+    const ui = {
+      xmlFile: document.getElementById("xmlFile"),
+      reloadDefaultsBtn: document.getElementById("reloadDefaultsBtn"),
+      xmlText: document.getElementById("xmlText"),
+      loadTextBtn: document.getElementById("loadTextBtn"),
+      groupSearchInput: document.getElementById("groupSearchInput"),
+      groupSelect: document.getElementById("groupSelect"),
+      containerSelect: document.getElementById("containerSelect"),
+      xInput: document.getElementById("xInput"),
+      yInput: document.getElementById("yInput"),
+      zInput: document.getElementById("zInput"),
+      rangeInput: document.getElementById("rangeInput"),
+      heightInput: document.getElementById("heightInput"),
+      flagsInput: document.getElementById("flagsInput"),
+      addPointBtn: document.getElementById("addPointBtn"),
+      deletePointBtn: document.getElementById("deletePointBtn"),
+      snapInput: document.getElementById("snapInput"),
+      undoBtn: document.getElementById("undoBtn"),
+      fit3dBtn: document.getElementById("fit3dBtn"),
+      listTabBtn: document.getElementById("listTabBtn"),
+      view2dTabBtn: document.getElementById("view2dTabBtn"),
+      listViewPane: document.getElementById("listViewPane"),
+      view2dPane: document.getElementById("view2dPane"),
+      addPointListBtn: document.getElementById("addPointListBtn"),
+      pointList: document.getElementById("pointList"),
+      objectPreview: document.getElementById("objectPreview"),
+      imageModal: document.getElementById("imageModal"),
+      imageModalContent: document.getElementById("imageModalContent"),
+      imageModalImg: document.getElementById("imageModalImg"),
+      imageModalCloseBtn: document.getElementById("imageModalCloseBtn"),
+      roomWidthInput: document.getElementById("roomWidthInput"),
+      roomHeightInput: document.getElementById("roomHeightInput"),
+      roomDepthInput: document.getElementById("roomDepthInput"),
+      roomEnabledInput: document.getElementById("roomEnabledInput"),
+      roomClampInput: document.getElementById("roomClampInput"),
+      exportPointsBtn: document.getElementById("exportPointsBtn"),
+      downloadXmlBtn: document.getElementById("downloadXmlBtn"),
+      outputText: document.getElementById("outputText"),
+      status: document.getElementById("status"),
+      canvasGrid: document.getElementById("canvasGrid"),
+      canvas2d: document.getElementById("canvas2d"),
+      canvas3d: document.getElementById("canvas3d"),
+      canvasTitle: document.getElementById("canvasTitle"),
+      pointCount: document.getElementById("pointCount")
+    };
+    const ctx2d = ui.canvas2d.getContext("2d");
+    const ctx3d = ui.canvas3d.getContext("2d");
+
+    function setStatus(message) {
+      ui.status.textContent = message;
+    }
+
+    function renderPointList() {
+      ui.pointList.innerHTML = "";
+      state.points.forEach((el, idx) => {
+        const p = parsePos(el);
+        const li = document.createElement("li");
+        li.addEventListener("pointerdown", () => {
+          selectPoint(idx, true);
+        });
+        li.addEventListener("click", () => {
+          selectPoint(idx, true);
+        });
+        const selectBtn = document.createElement("button");
+        selectBtn.type = "button";
+        selectBtn.className = "select-btn";
+        if (idx === state.selectedIdx) selectBtn.classList.add("active");
+        selectBtn.textContent = `#${idx + 1}  x:${p.x.toFixed(3)} y:${p.y.toFixed(3)} z:${p.z.toFixed(3)}`;
+        const onSelect = (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          selectPoint(idx, true);
+        };
+        selectBtn.addEventListener("pointerdown", onSelect);
+        selectBtn.addEventListener("click", onSelect);
+        const delBtn = document.createElement("button");
+        delBtn.type = "button";
+        delBtn.className = "delete-row-btn";
+        delBtn.textContent = "Delete";
+        const onDelete = (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          selectPoint(idx, false);
+          deleteSelectedPoint();
+        };
+        delBtn.addEventListener("pointerdown", onDelete);
+        delBtn.addEventListener("click", onDelete);
+        li.appendChild(selectBtn);
+        li.appendChild(delBtn);
+        ui.pointList.appendChild(li);
+      });
+    }
+
+    function selectPoint(idx, focusIn3d = false) {
+      if (idx < 0 || idx >= state.points.length) return;
+      state.selectedIdx = idx;
+      refreshPointInputs();
+      renderPointList();
+      if (focusIn3d) {
+        const p = parsePos(state.points[idx]);
+        state.view3d.targetX = p.x;
+        state.view3d.targetY = p.y;
+        state.view3d.targetZ = p.z;
+      }
+      drawAll();
+    }
+
+    function openImageOverlay(src, alt = "Object preview") {
+      if (!src) return;
+      ui.imageModalImg.src = src;
+      ui.imageModalImg.alt = alt;
+      ui.imageModal.classList.add("open");
+      ui.imageModal.setAttribute("aria-hidden", "false");
+    }
+
+    function closeImageOverlay() {
+      ui.imageModal.classList.remove("open");
+      ui.imageModal.setAttribute("aria-hidden", "true");
+      ui.imageModalImg.removeAttribute("src");
+    }
+
+    function renderObjectPreview() {
+      const groupName = (state.currentGroup?.getAttribute("name") || "").trim();
+      const links = window.MAPGROUP_OBJECT_LINK_DATA?.links || {};
+      const rec = groupName ? links[groupName.toLowerCase()] : null;
+      ui.objectPreview.innerHTML = "";
+      if (!groupName) {
+        ui.objectPreview.innerHTML = '<div class="meta">No group selected.</div>';
+        return;
+      }
+      if (!rec) {
+        ui.objectPreview.innerHTML = `<div class="meta"><strong>${groupName}</strong><br>No linked object ID found.</div>`;
+        return;
+      }
+      const img = document.createElement("img");
+      img.src = rec.imageUrl || "https://samsobjectfinder.com/images/placeholder.jpeg";
+      img.alt = rec.objectName || groupName;
+      img.loading = "lazy";
+      img.addEventListener("click", () => openImageOverlay(img.src, img.alt));
+      const meta = document.createElement("div");
+      meta.className = "meta";
+      meta.innerHTML = `<strong>${rec.objectName || groupName}</strong><br>ID: <code>${rec.id || "-"}</code>`;
+      const objectFinderUrl = `https://samsobjectfinder.com/?object=${encodeURIComponent(rec.objectName || groupName)}`;
+      const linksEl = document.createElement("div");
+      linksEl.className = "meta";
+      linksEl.innerHTML = `<a href="${objectFinderUrl}" target="_blank" rel="noopener noreferrer">Open on Sam's Object Finder</a> · <a href="${img.src}" target="_blank" rel="noopener noreferrer">Open image</a>`;
+      ui.objectPreview.appendChild(img);
+      ui.objectPreview.appendChild(meta);
+      ui.objectPreview.appendChild(linksEl);
+    }
+
+    function setSidebarMode(mode) {
+      state.sidebarMode = mode;
+      const list = mode === "list";
+      ui.listTabBtn.classList.toggle("active", list);
+      ui.view2dTabBtn.classList.toggle("active", !list);
+      ui.listViewPane.style.display = list ? "grid" : "none";
+      ui.view2dPane.style.display = list ? "none" : "grid";
+      resizeCanvas();
+    }
+
+    function fmt(n) {
+      const fixed = Number(n).toFixed(6);
+      return fixed === "-0.000000" ? "0.000000" : fixed;
+    }
+
+    function parsePos(el) {
+      const raw = (el.getAttribute("pos") || "0 0 0").trim().split(/\s+/).map(Number);
+      return { x: raw[0] || 0, y: raw[1] || 0, z: raw[2] || 0 };
+    }
+
+    function setPos(el, x, y, z) {
+      el.setAttribute("pos", `${fmt(x)} ${fmt(y)} ${fmt(z)}`);
+    }
+
+    function clampToRoom(x, y, z) {
+      if (!state.room.clamp) return { x, y, z };
+      const halfW = state.room.width * 0.5;
+      const halfD = state.room.depth * 0.5;
+      return {
+        x: Math.max(state.room.centerX - halfW, Math.min(state.room.centerX + halfW, x)),
+        y: Math.max(state.room.floorY, Math.min(state.room.floorY + state.room.height, y)),
+        z: Math.max(state.room.centerZ - halfD, Math.min(state.room.centerZ + halfD, z))
+      };
+    }
+
+    function snapshotCurrentPoints() {
+      if (!state.currentContainer) return [];
+      return Array.from(state.currentContainer.querySelectorAll("point")).map((el) => ({
+        pos: el.getAttribute("pos") || "0.000000 0.000000 0.000000",
+        range: el.getAttribute("range") || "0.100000",
+        height: el.getAttribute("height") || "0.250000",
+        flags: el.getAttribute("flags") || ""
+      }));
+    }
+
+    function pushUndoState() {
+      if (!state.currentContainer) return;
+      state.undoStack.push(snapshotCurrentPoints());
+      if (state.undoStack.length > 100) state.undoStack.shift();
+    }
+
+    function restoreSnapshot(snapshot) {
+      if (!state.currentContainer) return;
+      Array.from(state.currentContainer.querySelectorAll("point")).forEach((p) => p.remove());
+      snapshot.forEach((p) => {
+        const el = state.xmlDoc.createElement("point");
+        el.setAttribute("pos", p.pos);
+        el.setAttribute("range", p.range);
+        el.setAttribute("height", p.height);
+        if (p.flags) el.setAttribute("flags", p.flags);
+        state.currentContainer.appendChild(el);
+      });
+      refreshPoints();
+    }
+
+    function undoLast() {
+      if (!state.undoStack.length) {
+        setStatus("Nothing to undo.");
+        return;
+      }
+      const snapshot = state.undoStack.pop();
+      restoreSnapshot(snapshot);
+      setStatus("Undo applied.");
+    }
+
+    function applyPointInputs() {
+      const idx = state.selectedIdx;
+      if (idx < 0 || idx >= state.points.length) return;
+      pushUndoState();
+      const el = state.points[idx];
+      const p = parsePos(el);
+
+      const x = Number.isFinite(Number(ui.xInput.value)) ? Number(ui.xInput.value) : p.x;
+      const y = Number.isFinite(Number(ui.yInput.value)) ? Number(ui.yInput.value) : p.y;
+      const z = Number.isFinite(Number(ui.zInput.value)) ? Number(ui.zInput.value) : p.z;
+      setPos(el, x, y, z);
+
+      if (ui.rangeInput.value !== "") el.setAttribute("range", fmt(ui.rangeInput.value));
+      if (ui.heightInput.value !== "") el.setAttribute("height", fmt(ui.heightInput.value));
+
+      const flags = ui.flagsInput.value.trim();
+      if (flags) {
+        el.setAttribute("flags", flags);
+      } else {
+        el.removeAttribute("flags");
+      }
+      renderPointList();
+      refreshPoints();
+    }
+
+    function refreshPointInputs() {
+      const idx = state.selectedIdx;
+      if (idx < 0 || idx >= state.points.length) {
+        ui.xInput.value = "";
+        ui.yInput.value = "";
+        ui.zInput.value = "";
+        ui.rangeInput.value = "";
+        ui.heightInput.value = "";
+        ui.flagsInput.value = "";
+        return;
+      }
+      const el = state.points[idx];
+      const p = parsePos(el);
+      ui.xInput.value = p.x;
+      ui.yInput.value = p.y;
+      ui.zInput.value = p.z;
+      ui.rangeInput.value = el.getAttribute("range") || "";
+      ui.heightInput.value = el.getAttribute("height") || "";
+      ui.flagsInput.value = el.getAttribute("flags") || "";
+    }
+
+    function computeViewBounds() {
+      if (state.points.length === 0) {
+        state.view.minX = -5;
+        state.view.maxX = 5;
+        state.view.minY = -2;
+        state.view.maxY = 2;
+        state.view.minZ = -5;
+        state.view.maxZ = 5;
+      } else {
+        let minX = Infinity, maxX = -Infinity;
+        let minY = Infinity, maxY = -Infinity;
+        let minZ = Infinity, maxZ = -Infinity;
+        state.points.forEach((el) => {
+          const p = parsePos(el);
+          minX = Math.min(minX, p.x);
+          maxX = Math.max(maxX, p.x);
+          minY = Math.min(minY, p.y);
+          maxY = Math.max(maxY, p.y);
+          minZ = Math.min(minZ, p.z);
+          maxZ = Math.max(maxZ, p.z);
+        });
+        const marginX = Math.max(0.5, (maxX - minX) * 0.2);
+        const marginY = Math.max(0.5, (maxY - minY) * 0.2);
+        const marginZ = Math.max(0.5, (maxZ - minZ) * 0.2);
+        state.view.minX = minX - marginX;
+        state.view.maxX = maxX + marginX;
+        state.view.minY = minY - marginY;
+        state.view.maxY = maxY + marginY;
+        state.view.minZ = minZ - marginZ;
+        state.view.maxZ = maxZ + marginZ;
+      }
+      state.view3d.targetX = (state.view.minX + state.view.maxX) / 2;
+      state.view3d.targetY = (state.view.minY + state.view.maxY) / 2;
+      state.view3d.targetZ = (state.view.minZ + state.view.maxZ) / 2;
+      state.room.centerX = state.view3d.targetX;
+      state.room.centerZ = state.view3d.targetZ;
+      state.room.floorY = Math.min(0, state.view.minY);
+      const span = Math.max(
+        state.view.maxX - state.view.minX,
+        state.view.maxY - state.view.minY,
+        state.view.maxZ - state.view.minZ
+      );
+      if (state.view3d.autoFit) {
+        state.view3d.distance = Math.max(4, span * 2.4);
+        state.view3d.autoFit = false;
+      }
+      const pad = state.view.pad;
+      const w = ui.canvas2d.clientWidth || ui.canvas3d.clientWidth || 600;
+      const h = ui.canvas2d.clientHeight || ui.canvas3d.clientHeight || 400;
+      const dx = Math.max(0.001, state.view.maxX - state.view.minX);
+      const dz = Math.max(0.001, state.view.maxZ - state.view.minZ);
+      state.view.scale = Math.min((w - pad * 2) / dx, (h - pad * 2) / dz);
+    }
+
+    function worldToScreen(x, z) {
+      const { minX, minZ, scale, pad } = state.view;
+      const sx = pad + (x - minX) * scale;
+      const sz = ui.canvas2d.clientHeight - (pad + (z - minZ) * scale);
+      return { x: sx, y: sz };
+    }
+
+    function screenToWorld(sx, sy) {
+      const { minX, minZ, scale, pad } = state.view;
+      const x = minX + (sx - pad) / scale;
+      const z = minZ + (ui.canvas2d.clientHeight - sy - pad) / scale;
+      return { x, z };
+    }
+
+    function findPointAt2d(screenX, screenY) {
+      for (let i = state.points.length - 1; i >= 0; i--) {
+        const p = parsePos(state.points[i]);
+        const s = worldToScreen(p.x, p.z);
+        const dist = Math.hypot(s.x - screenX, s.y - screenY);
+        if (dist <= 9) return i;
+      }
+      return -1;
+    }
+
+    function resizeCanvas() {
+      const rect2d = ui.canvas2d.getBoundingClientRect();
+      const rect3d = ui.canvas3d.getBoundingClientRect();
+      const dpr = window.devicePixelRatio || 1;
+      ui.canvas2d.width = Math.max(1, Math.floor(rect2d.width * dpr));
+      ui.canvas2d.height = Math.max(1, Math.floor(rect2d.height * dpr));
+      ui.canvas3d.width = Math.floor(rect3d.width * dpr);
+      ui.canvas3d.height = Math.floor(rect3d.height * dpr);
+      ctx2d.setTransform(dpr, 0, 0, dpr, 0, 0);
+      ctx3d.setTransform(dpr, 0, 0, dpr, 0, 0);
+      computeViewBounds();
+      drawAll();
+    }
+
+    function drawAxes2d() {
+      const origin = worldToScreen(0, 0);
+      ctx2d.strokeStyle = "#b9b2a8";
+      ctx2d.lineWidth = 1;
+      ctx2d.beginPath();
+      ctx2d.moveTo(0, origin.y);
+      ctx2d.lineTo(ui.canvas2d.clientWidth, origin.y);
+      ctx2d.moveTo(origin.x, 0);
+      ctx2d.lineTo(origin.x, ui.canvas2d.clientHeight);
+      ctx2d.stroke();
+    }
+
+    function draw2d() {
+      if (state.sidebarMode !== "2d") return;
+      const w = ui.canvas2d.clientWidth;
+      const h = ui.canvas2d.clientHeight;
+      ctx2d.clearRect(0, 0, w, h);
+      drawAxes2d();
+
+      state.points.forEach((el, idx) => {
+        const p = parsePos(el);
+        const s = worldToScreen(p.x, p.z);
+        const selected = idx === state.selectedIdx;
+        ctx2d.beginPath();
+        ctx2d.arc(s.x, s.y, selected ? 7 : 5, 0, Math.PI * 2);
+        ctx2d.fillStyle = selected ? "#c45b36" : "#1f8a70";
+        ctx2d.fill();
+        ctx2d.strokeStyle = "#ffffff";
+        ctx2d.lineWidth = 1.5;
+        ctx2d.stroke();
+      });
+    }
+
+    function project3d(p) {
+      const v = state.view3d;
+      const cx = p.x - v.targetX;
+      const cy = p.y - v.targetY;
+      const cz = p.z - v.targetZ;
+
+      const cosY = Math.cos(v.yaw);
+      const sinY = Math.sin(v.yaw);
+      const x1 = cosY * cx - sinY * cz;
+      const z1 = sinY * cx + cosY * cz;
+
+      const cosP = Math.cos(v.pitch);
+      const sinP = Math.sin(v.pitch);
+      const y2 = cosP * cy - sinP * z1;
+      const z2 = sinP * cy + cosP * z1;
+
+      const depth = z2 + v.distance;
+      if (depth <= 0.01) return null;
+
+      const f = Math.min(ui.canvas3d.clientWidth, ui.canvas3d.clientHeight) * 0.88;
+      return {
+        x: ui.canvas3d.clientWidth / 2 + (x1 * f) / depth,
+        y: ui.canvas3d.clientHeight / 2 - (y2 * f) / depth,
+        depth
+      };
+    }
+
+    function rotateFromCamera(v) {
+      const cosP = Math.cos(state.view3d.pitch);
+      const sinP = Math.sin(state.view3d.pitch);
+      const y1 = cosP * v.y + sinP * v.z;
+      const z1 = -sinP * v.y + cosP * v.z;
+      const x1 = v.x;
+
+      const cosY = Math.cos(state.view3d.yaw);
+      const sinY = Math.sin(state.view3d.yaw);
+      const x = cosY * x1 + sinY * z1;
+      const z = -sinY * x1 + cosY * z1;
+      return { x, y: y1, z };
+    }
+
+    function getCameraRay(sx, sy) {
+      const w = ui.canvas3d.clientWidth;
+      const h = ui.canvas3d.clientHeight;
+      const f = Math.min(w, h) * 0.88;
+      const u = (sx - w / 2) / f;
+      const v = -(sy - h / 2) / f;
+      const camPosLocal = { x: 0, y: 0, z: -state.view3d.distance };
+      const dirLocal = { x: u, y: v, z: 1 };
+      const len = Math.hypot(dirLocal.x, dirLocal.y, dirLocal.z) || 1;
+      dirLocal.x /= len;
+      dirLocal.y /= len;
+      dirLocal.z /= len;
+
+      const camPosWorldRel = rotateFromCamera(camPosLocal);
+      const dirWorld = rotateFromCamera(dirLocal);
+      const dirLen = Math.hypot(dirWorld.x, dirWorld.y, dirWorld.z) || 1;
+      dirWorld.x /= dirLen;
+      dirWorld.y /= dirLen;
+      dirWorld.z /= dirLen;
+
+      return {
+        origin: {
+          x: state.view3d.targetX + camPosWorldRel.x,
+          y: state.view3d.targetY + camPosWorldRel.y,
+          z: state.view3d.targetZ + camPosWorldRel.z
+        },
+        dir: dirWorld
+      };
+    }
+
+    function intersectRayPlaneY(ray, planeY) {
+      if (Math.abs(ray.dir.y) < 1e-6) return null;
+      const t = (planeY - ray.origin.y) / ray.dir.y;
+      if (t <= 0) return null;
+      return {
+        x: ray.origin.x + ray.dir.x * t,
+        y: planeY,
+        z: ray.origin.z + ray.dir.z * t
+      };
+    }
+
+    function solveAxisParamFromRay(ray, axisBase, axisDir) {
+      const ox = ray.origin.x - axisBase.x;
+      const oy = ray.origin.y - axisBase.y;
+      const oz = ray.origin.z - axisBase.z;
+      const a = axisDir.x * axisDir.x + axisDir.y * axisDir.y + axisDir.z * axisDir.z;
+      const b = axisDir.x * ray.dir.x + axisDir.y * ray.dir.y + axisDir.z * ray.dir.z;
+      const c = ray.dir.x * ray.dir.x + ray.dir.y * ray.dir.y + ray.dir.z * ray.dir.z;
+      const d = axisDir.x * ox + axisDir.y * oy + axisDir.z * oz;
+      const e = ray.dir.x * ox + ray.dir.y * oy + ray.dir.z * oz;
+      const det = a * c - b * b;
+      if (Math.abs(det) < 1e-8) return 0;
+      return (d * c - e * b) / det;
+    }
+
+    function pointSegmentDistance(px, py, ax, ay, bx, by) {
+      const abx = bx - ax;
+      const aby = by - ay;
+      const len2 = abx * abx + aby * aby;
+      if (len2 <= 1e-6) return Math.hypot(px - ax, py - ay);
+      const t = Math.max(0, Math.min(1, ((px - ax) * abx + (py - ay) * aby) / len2));
+      const cx = ax + abx * t;
+      const cy = ay + aby * t;
+      return Math.hypot(px - cx, py - cy);
+    }
+
+    function getGizmoLength() {
+      const span = Math.max(
+        state.view.maxX - state.view.minX,
+        state.view.maxY - state.view.minY,
+        state.view.maxZ - state.view.minZ
+      );
+      return Math.max(0.8, span * 0.08);
+    }
+
+    function findGizmoAxisAt3d(screenX, screenY) {
+      if (state.selectedIdx < 0 || state.selectedIdx >= state.points.length) return null;
+      const p = parsePos(state.points[state.selectedIdx]);
+      const len = getGizmoLength();
+      const axes = [
+        { mode: "axis_x", end: { x: p.x + len, y: p.y, z: p.z } },
+        { mode: "axis_y", end: { x: p.x, y: p.y + len, z: p.z } },
+        { mode: "axis_z", end: { x: p.x, y: p.y, z: p.z + len } }
+      ];
+      let best = null;
+      let bestDist = Infinity;
+      for (const axis of axes) {
+        const a = project3d(p);
+        const b = project3d(axis.end);
+        if (!a || !b) continue;
+        const dist = pointSegmentDistance(screenX, screenY, a.x, a.y, b.x, b.y);
+        if (dist < 9 && dist < bestDist) {
+          bestDist = dist;
+          best = axis.mode;
+        }
+      }
+      return best;
+    }
+
+    function drawLine3d(a, b, color, width = 1) {
+      const pa = project3d(a);
+      const pb = project3d(b);
+      if (!pa || !pb) return;
+      ctx3d.beginPath();
+      ctx3d.moveTo(pa.x, pa.y);
+      ctx3d.lineTo(pb.x, pb.y);
+      ctx3d.strokeStyle = color;
+      ctx3d.lineWidth = width;
+      ctx3d.stroke();
+    }
+
+    function fillTri3d(a, b, c, color) {
+      const pa = project3d(a);
+      const pb = project3d(b);
+      const pc = project3d(c);
+      if (!pa || !pb || !pc) return false;
+      ctx3d.beginPath();
+      ctx3d.moveTo(pa.x, pa.y);
+      ctx3d.lineTo(pb.x, pb.y);
+      ctx3d.lineTo(pc.x, pc.y);
+      ctx3d.closePath();
+      ctx3d.fillStyle = color;
+      ctx3d.fill();
+      return true;
+    }
+
+    function fillQuad3d(a, b, c, d, color) {
+      const t1 = fillTri3d(a, b, c, color);
+      const t2 = fillTri3d(a, c, d, color);
+      return t1 || t2;
+    }
+
+    function drawArrow3d(a, b, color, width = 1.8) {
+      const pa = project3d(a);
+      const pb = project3d(b);
+      if (!pa || !pb) return;
+      ctx3d.beginPath();
+      ctx3d.moveTo(pa.x, pa.y);
+      ctx3d.lineTo(pb.x, pb.y);
+      ctx3d.strokeStyle = color;
+      ctx3d.lineWidth = width;
+      ctx3d.stroke();
+
+      const angle = Math.atan2(pb.y - pa.y, pb.x - pa.x);
+      const headLen = 9;
+      const leftX = pb.x - headLen * Math.cos(angle - 0.42);
+      const leftY = pb.y - headLen * Math.sin(angle - 0.42);
+      const rightX = pb.x - headLen * Math.cos(angle + 0.42);
+      const rightY = pb.y - headLen * Math.sin(angle + 0.42);
+      ctx3d.beginPath();
+      ctx3d.moveTo(pb.x, pb.y);
+      ctx3d.lineTo(leftX, leftY);
+      ctx3d.lineTo(rightX, rightY);
+      ctx3d.closePath();
+      ctx3d.fillStyle = color;
+      ctx3d.fill();
+    }
+
+    function draw3d() {
+      const w = ui.canvas3d.clientWidth;
+      const h = ui.canvas3d.clientHeight;
+      ctx3d.clearRect(0, 0, w, h);
+
+      const span = Math.max(
+        state.view.maxX - state.view.minX,
+        state.view.maxY - state.view.minY,
+        state.view.maxZ - state.view.minZ
+      );
+      const axis = Math.max(2, span * 0.7);
+      drawLine3d({ x: -axis, y: 0, z: 0 }, { x: axis, y: 0, z: 0 }, "#bd6d53", 1.4);
+      drawLine3d({ x: 0, y: -axis, z: 0 }, { x: 0, y: axis, z: 0 }, "#678d4f", 1.4);
+      drawLine3d({ x: 0, y: 0, z: -axis }, { x: 0, y: 0, z: axis }, "#4a7396", 1.4);
+
+      if (state.room.enabled) {
+        const hw = state.room.width * 0.5;
+        const hd = state.room.depth * 0.5;
+        const x0 = state.room.centerX - hw;
+        const x1 = state.room.centerX + hw;
+        const z0 = state.room.centerZ - hd;
+        const z1 = state.room.centerZ + hd;
+        const y0 = state.room.floorY;
+        const y1 = state.room.floorY + state.room.height;
+        const basementY = y0 - Math.max(state.room.height * 1.2, 4);
+
+        fillQuad3d(
+          { x: x0, y: basementY, z: z0 },
+          { x: x1, y: basementY, z: z0 },
+          { x: x1, y: basementY, z: z1 },
+          { x: x0, y: basementY, z: z1 },
+          "rgba(126,140,152,0.08)"
+        );
+        fillQuad3d(
+          { x: x0, y: y0, z: z0 },
+          { x: x1, y: y0, z: z0 },
+          { x: x1, y: y1, z: z0 },
+          { x: x0, y: y1, z: z0 },
+          "rgba(120,134,146,0.035)"
+        );
+        fillQuad3d(
+          { x: x0, y: y0, z: z0 },
+          { x: x0, y: y0, z: z1 },
+          { x: x0, y: y1, z: z1 },
+          { x: x0, y: y1, z: z0 },
+          "rgba(120,134,146,0.03)"
+        );
+
+        drawLine3d({ x: x0, y: y0, z: z0 }, { x: x1, y: y0, z: z0 }, "rgba(98,112,124,0.8)", 1.2);
+        drawLine3d({ x: x1, y: y0, z: z0 }, { x: x1, y: y0, z: z1 }, "rgba(98,112,124,0.8)", 1.2);
+        drawLine3d({ x: x1, y: y0, z: z1 }, { x: x0, y: y0, z: z1 }, "rgba(98,112,124,0.8)", 1.2);
+        drawLine3d({ x: x0, y: y0, z: z1 }, { x: x0, y: y0, z: z0 }, "rgba(98,112,124,0.8)", 1.2);
+
+        drawLine3d({ x: x0, y: y1, z: z0 }, { x: x1, y: y1, z: z0 }, "rgba(120,132,142,0.55)", 1);
+        drawLine3d({ x: x1, y: y1, z: z0 }, { x: x1, y: y1, z: z1 }, "rgba(120,132,142,0.55)", 1);
+        drawLine3d({ x: x1, y: y1, z: z1 }, { x: x0, y: y1, z: z1 }, "rgba(120,132,142,0.55)", 1);
+        drawLine3d({ x: x0, y: y1, z: z1 }, { x: x0, y: y1, z: z0 }, "rgba(120,132,142,0.55)", 1);
+
+        drawLine3d({ x: x0, y: y0, z: z0 }, { x: x0, y: y1, z: z0 }, "rgba(120,132,142,0.5)", 1);
+        drawLine3d({ x: x1, y: y0, z: z0 }, { x: x1, y: y1, z: z0 }, "rgba(120,132,142,0.5)", 1);
+        drawLine3d({ x: x1, y: y0, z: z1 }, { x: x1, y: y1, z: z1 }, "rgba(120,132,142,0.5)", 1);
+        drawLine3d({ x: x0, y: y0, z: z1 }, { x: x0, y: y1, z: z1 }, "rgba(120,132,142,0.5)", 1);
+      }
+
+      const floorY = Math.min(0, state.view.minY);
+      for (let i = 0; i <= 10; i++) {
+        const t = i / 10;
+        const x = state.view.minX + (state.view.maxX - state.view.minX) * t;
+        const z = state.view.minZ + (state.view.maxZ - state.view.minZ) * t;
+        drawLine3d(
+          { x, y: floorY, z: state.view.minZ },
+          { x, y: floorY, z: state.view.maxZ },
+          "rgba(160,150,138,0.35)",
+          1
+        );
+        drawLine3d(
+          { x: state.view.minX, y: floorY, z },
+          { x: state.view.maxX, y: floorY, z },
+          "rgba(160,150,138,0.35)",
+          1
+        );
+      }
+
+      const drawItems = state.points.map((el, idx) => {
+        const p = parsePos(el);
+        const projected = project3d(p);
+        return projected ? { idx, projected } : null;
+      }).filter(Boolean).sort((a, b) => b.projected.depth - a.projected.depth);
+
+      drawItems.forEach(({ idx, projected }) => {
+        const selected = idx === state.selectedIdx;
+        const r = selected ? 11 : 5;
+        ctx3d.beginPath();
+        ctx3d.arc(projected.x, projected.y, r, 0, Math.PI * 2);
+        ctx3d.fillStyle = selected ? "#c45b36" : "#1f8a70";
+        ctx3d.fill();
+        ctx3d.strokeStyle = "#ffffff";
+        ctx3d.lineWidth = 1.25;
+        ctx3d.stroke();
+      });
+
+      if (state.selectedIdx >= 0 && state.selectedIdx < state.points.length) {
+        const sp = parsePos(state.points[state.selectedIdx]);
+        const gizmoLen = getGizmoLength();
+        const activeMode = state.view3d.draggingPoint ? state.view3d.dragMode : state.view3d.hoverAxisMode;
+        const xActive = activeMode === "axis_x";
+        const yActive = activeMode === "axis_y";
+        const zActive = activeMode === "axis_z";
+        drawArrow3d(
+          sp,
+          { x: sp.x + gizmoLen, y: sp.y, z: sp.z },
+          xActive ? "rgba(229,91,52,1)" : "rgba(203,93,62,0.95)",
+          xActive ? 3.6 : 2
+        );
+        drawArrow3d(
+          sp,
+          { x: sp.x, y: sp.y + gizmoLen, z: sp.z },
+          yActive ? "rgba(86,184,66,1)" : "rgba(102,161,74,0.95)",
+          yActive ? 3.6 : 2
+        );
+        drawArrow3d(
+          sp,
+          { x: sp.x, y: sp.y, z: sp.z + gizmoLen },
+          zActive ? "rgba(65,149,235,1)" : "rgba(72,124,180,0.95)",
+          zActive ? 3.6 : 2
+        );
+      }
+
+      if (state.view3d.draggingPoint && state.view3d.dragStart && state.selectedIdx >= 0 && state.selectedIdx < state.points.length) {
+        const current = parsePos(state.points[state.selectedIdx]);
+        drawLine3d(state.view3d.dragStart, current, "rgba(230,142,55,0.9)", 2);
+      }
+    }
+
+    function drawAll() {
+      draw2d();
+      draw3d();
+    }
+
+    function findPointAt3d(screenX, screenY) {
+      let bestIdx = -1;
+      let bestDist = Infinity;
+      state.points.forEach((el, idx) => {
+        const p = parsePos(el);
+        const proj = project3d(p);
+        if (!proj) return;
+        const dist = Math.hypot(proj.x - screenX, proj.y - screenY);
+        const limit = idx === state.selectedIdx ? 16 : 10;
+        if (dist < limit && dist < bestDist) {
+          bestDist = dist;
+          bestIdx = idx;
+        }
+      });
+      return bestIdx;
+    }
+
+    function refreshPoints(resetSelection = false) {
+      state.points = state.currentContainer ? Array.from(state.currentContainer.querySelectorAll("point")) : [];
+      if (resetSelection) state.view3d.autoFit = true;
+      if (resetSelection) {
+        state.selectedIdx = state.points.length ? 0 : -1;
+      } else if (state.selectedIdx >= state.points.length) {
+        state.selectedIdx = state.points.length - 1;
+      }
+      ui.pointCount.textContent = `${state.points.length} points`;
+      refreshPointInputs();
+      renderPointList();
+      computeViewBounds();
+      drawAll();
+    }
+
+    function parseXmlText(xmlText) {
+      const parser = new DOMParser();
+      const doc = parser.parseFromString(xmlText, "application/xml");
+      const err = doc.querySelector("parsererror");
+      if (err) throw new Error(err.textContent || "Invalid XML");
+      return doc;
+    }
+
+    function setXmlDoc(doc, filename = "mapgroupproto.xml") {
+      state.xmlDoc = doc;
+      state.filename = filename;
+      state.undoStack = [];
+      buildGroupList();
+    }
+
+    async function loadDefaultMergedFile() {
+      let text = "";
+      if (typeof window.BUILTIN_MAPGROUPPROTO_XML === "string" && window.BUILTIN_MAPGROUPPROTO_XML.length > 0) {
+        text = window.BUILTIN_MAPGROUPPROTO_XML;
+      } else {
+        const res = await fetch(DEFAULT_MAPGROUP_FILE);
+        if (!res.ok) throw new Error(`Failed to fetch ${DEFAULT_MAPGROUP_FILE}`);
+        text = await res.text();
+      }
+      const doc = parseXmlText(text);
+      setXmlDoc(doc, DEFAULT_MAPGROUP_FILE);
+      setStatus("Loaded built-in merged list.");
+    }
+
+    function buildGroupList() {
+      const groups = state.xmlDoc ? Array.from(state.xmlDoc.querySelectorAll("group")) : [];
+      const selectedName = state.currentGroup?.getAttribute("name") || "";
+      const filter = (ui.groupSearchInput.value || "").trim().toLowerCase();
+      state.filteredGroupIndices = [];
+      ui.groupSelect.innerHTML = "";
+      groups.forEach((group, idx) => {
+        const name = group.getAttribute("name") || `group_${idx}`;
+        if (filter && !name.toLowerCase().includes(filter)) return;
+        state.filteredGroupIndices.push(idx);
+        const option = document.createElement("option");
+        option.value = idx;
+        option.textContent = name;
+        ui.groupSelect.appendChild(option);
+      });
+      if (state.filteredGroupIndices.length) {
+        const groupsByIdx = Array.from(ui.groupSelect.options).map((o) => Number(o.value));
+        const targetIdx = groupsByIdx.includes(groups.findIndex((g) => (g.getAttribute("name") || "") === selectedName))
+          ? groups.findIndex((g) => (g.getAttribute("name") || "") === selectedName)
+          : state.filteredGroupIndices[0];
+        ui.groupSelect.value = String(targetIdx);
+        state.currentGroup = groups[targetIdx] || null;
+        buildContainerList();
+      } else {
+        state.currentGroup = null;
+        state.currentContainer = null;
+        ui.containerSelect.innerHTML = "";
+        ui.canvasTitle.textContent = "No matching group";
+        renderObjectPreview();
+        refreshPoints(true);
+      }
+    }
+
+    function buildContainerList() {
+      const containers = state.currentGroup ? Array.from(state.currentGroup.querySelectorAll("container")) : [];
+      ui.containerSelect.innerHTML = "";
+      containers.forEach((container, idx) => {
+        const option = document.createElement("option");
+        option.value = idx;
+        const name = container.getAttribute("name") || `container_${idx}`;
+        option.textContent = `${name} (${container.querySelectorAll("point").length} points)`;
+        ui.containerSelect.appendChild(option);
+      });
+      if (containers.length) {
+        state.currentContainer = containers[0];
+        state.undoStack = [];
+        ui.containerSelect.value = "0";
+        ui.canvasTitle.textContent = `${state.currentGroup.getAttribute("name")} / ${state.currentContainer.getAttribute("name")}`;
+        renderObjectPreview();
+        refreshPoints(true);
+      } else {
+        state.currentContainer = null;
+        state.undoStack = [];
+        ui.canvasTitle.textContent = `${state.currentGroup?.getAttribute("name") || "No group"} / no container`;
+        renderObjectPreview();
+        refreshPoints(true);
+      }
+    }
+
+    function parseXml(xmlText, filename = "mapgroupproto.xml") {
+      const doc = parseXmlText(xmlText);
+      setXmlDoc(doc, filename);
+      const groups = state.xmlDoc ? state.xmlDoc.querySelectorAll("group").length : 0;
+      setStatus(`Loaded ${filename} (${groups} groups).`);
+    }
+
+    function addPointAt(x, z) {
+      if (!state.currentContainer) return;
+      pushUndoState();
+      const pEl = state.xmlDoc.createElement("point");
+      const selected = state.points[state.selectedIdx];
+      const y = selected ? parsePos(selected).y : 0;
+      const range = selected ? selected.getAttribute("range") || "0.100000" : "0.100000";
+      const height = selected ? selected.getAttribute("height") || "0.250000" : "0.250000";
+      const flags = selected ? selected.getAttribute("flags") : "";
+
+      const clamped = clampToRoom(x, y, z);
+      setPos(pEl, clamped.x, clamped.y, clamped.z);
+      pEl.setAttribute("range", range);
+      pEl.setAttribute("height", height);
+      if (flags) pEl.setAttribute("flags", flags);
+      state.currentContainer.appendChild(pEl);
+      refreshPoints();
+      state.selectedIdx = state.points.length - 1;
+      refreshPointInputs();
+      renderPointList();
+      drawAll();
+    }
+
+    function deleteSelectedPoint() {
+      const idx = state.selectedIdx;
+      if (idx < 0 || idx >= state.points.length) return;
+      pushUndoState();
+      state.points[idx].remove();
+      refreshPoints();
+      drawAll();
+    }
+
+    function exportContainerPoints() {
+      if (!state.currentGroup) return;
+      ui.outputText.value = new XMLSerializer().serializeToString(state.currentGroup);
+    }
+
+    function exportFullXml() {
+      if (!state.xmlDoc) return "";
+      const xml = new XMLSerializer().serializeToString(state.xmlDoc);
+      return xml.startsWith("<?xml") ? xml : `<?xml version="1.0" encoding="UTF-8"?>\n${xml}`;
+    }
+
+    function downloadUpdatedXml() {
+      const xml = exportFullXml();
+      if (!xml) return;
+      ui.outputText.value = xml;
+      const blob = new Blob([xml], { type: "application/xml;charset=utf-8" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = state.filename.replace(/\.xml$/i, "") + ".edited.xml";
+      a.click();
+      URL.revokeObjectURL(url);
+      setStatus(`Downloaded ${a.download}`);
+    }
+
+    ui.xmlFile.addEventListener("change", async (e) => {
+      const file = e.target.files?.[0];
+      if (!file) return;
+      try {
+        const text = await file.text();
+        ui.xmlText.value = text;
+        parseXml(text, file.name);
+      } catch (err) {
+        setStatus(`Load error: ${err.message}`);
+      } finally {
+        ui.xmlFile.value = "";
+      }
+    });
+
+    ui.reloadDefaultsBtn.addEventListener("click", async () => {
+      try {
+        await loadDefaultMergedFile();
+      } catch (err) {
+        setStatus(`Default load error: ${err.message}`);
+      }
+    });
+
+    ui.loadTextBtn.addEventListener("click", () => {
+      try {
+        parseXml(ui.xmlText.value, "pasted-mapgroupproto.xml");
+      } catch (err) {
+        setStatus(`Load error: ${err.message}`);
+      }
+    });
+
+    ui.groupSearchInput.addEventListener("input", () => {
+      buildGroupList();
+    });
+
+    ui.groupSelect.addEventListener("change", () => {
+      const groups = state.xmlDoc ? Array.from(state.xmlDoc.querySelectorAll("group")) : [];
+      state.currentGroup = groups[Number(ui.groupSelect.value)] || null;
+      buildContainerList();
+    });
+
+    ui.containerSelect.addEventListener("change", () => {
+      const containers = state.currentGroup ? Array.from(state.currentGroup.querySelectorAll("container")) : [];
+      state.currentContainer = containers[Number(ui.containerSelect.value)] || null;
+      ui.canvasTitle.textContent = `${state.currentGroup?.getAttribute("name") || "No group"} / ${state.currentContainer?.getAttribute("name") || "no container"}`;
+      refreshPoints(true);
+    });
+
+    [ui.xInput, ui.yInput, ui.zInput, ui.rangeInput, ui.heightInput, ui.flagsInput].forEach((el) => {
+      el.addEventListener("change", applyPointInputs);
+    });
+
+    ui.addPointBtn.addEventListener("click", () => {
+      const x = (state.view.minX + state.view.maxX) / 2;
+      const z = (state.view.minZ + state.view.maxZ) / 2;
+      addPointAt(x, z);
+    });
+
+    ui.deletePointBtn.addEventListener("click", deleteSelectedPoint);
+    ui.undoBtn.addEventListener("click", undoLast);
+    ui.fit3dBtn.addEventListener("click", () => {
+      state.view3d.autoFit = true;
+      computeViewBounds();
+      draw3d();
+    });
+    [ui.roomWidthInput, ui.roomHeightInput, ui.roomDepthInput].forEach((el) => {
+      el.addEventListener("change", () => {
+        state.room.width = Math.max(1, Number(ui.roomWidthInput.value) || 20);
+        state.room.height = Math.max(1, Number(ui.roomHeightInput.value) || 6);
+        state.room.depth = Math.max(1, Number(ui.roomDepthInput.value) || 20);
+        draw3d();
+      });
+    });
+    ui.roomEnabledInput.addEventListener("change", () => {
+      state.room.enabled = ui.roomEnabledInput.checked;
+      draw3d();
+    });
+    ui.roomClampInput.addEventListener("change", () => {
+      state.room.clamp = ui.roomClampInput.checked;
+      draw3d();
+    });
+    ui.exportPointsBtn.addEventListener("click", exportContainerPoints);
+    ui.downloadXmlBtn.addEventListener("click", downloadUpdatedXml);
+    ui.canvas3d.addEventListener("contextmenu", (e) => e.preventDefault());
+
+    ui.listTabBtn.addEventListener("click", () => setSidebarMode("list"));
+    ui.view2dTabBtn.addEventListener("click", () => setSidebarMode("2d"));
+    ui.addPointListBtn.addEventListener("click", () => {
+      const x = (state.view.minX + state.view.maxX) / 2;
+      const z = (state.view.minZ + state.view.maxZ) / 2;
+      addPointAt(x, z);
+    });
+    ui.imageModalCloseBtn.addEventListener("click", closeImageOverlay);
+    ui.imageModal.addEventListener("click", (e) => {
+      if (e.target === ui.imageModal) closeImageOverlay();
+    });
+    ui.imageModalContent.addEventListener("click", (e) => e.stopPropagation());
+
+    ui.canvas2d.addEventListener("mousedown", (e) => {
+      if (state.sidebarMode !== "2d") return;
+      if (!state.currentContainer) return;
+      const rect = ui.canvas2d.getBoundingClientRect();
+      const sx = e.clientX - rect.left;
+      const sy = e.clientY - rect.top;
+      const idx = findPointAt2d(sx, sy);
+      if (idx >= 0) {
+        pushUndoState();
+        state.dragUndoPushed2d = true;
+        selectPoint(idx, false);
+        const p = parsePos(state.points[idx]);
+        const w = screenToWorld(sx, sy);
+        state.dragOffset.x = p.x - w.x;
+        state.dragOffset.z = p.z - w.z;
+        state.draggingIdx = idx;
+      } else {
+        const w = screenToWorld(sx, sy);
+        addPointAt(w.x, w.z);
+      }
+    });
+
+    ui.canvas3d.addEventListener("mousedown", (e) => {
+      if (!state.currentContainer) return;
+      const rect = ui.canvas3d.getBoundingClientRect();
+      const sx = e.clientX - rect.left;
+      const sy = e.clientY - rect.top;
+      const idx = findPointAt3d(sx, sy);
+      const gizmoMode = e.ctrlKey ? findGizmoAxisAt3d(sx, sy) : null;
+
+      if (e.button === 2 && e.ctrlKey) {
+        if (idx >= 0) {
+          selectPoint(idx, false);
+          deleteSelectedPoint();
+        }
+        return;
+      }
+
+      if (e.button !== 0) return;
+
+      if (!e.ctrlKey) {
+        state.view3d.draggingCamera = true;
+        state.view3d.lastX = e.clientX;
+        state.view3d.lastY = e.clientY;
+        return;
+      }
+
+      if (gizmoMode && state.selectedIdx >= 0 && state.selectedIdx < state.points.length) {
+        pushUndoState();
+        state.view3d.dragUndoPushed3d = true;
+        state.view3d.draggingPoint = true;
+        state.view3d.dragPointIdx = state.selectedIdx;
+        state.view3d.dragMode = gizmoMode;
+        const p0 = parsePos(state.points[state.selectedIdx]);
+        state.view3d.dragStart = { x: p0.x, y: p0.y, z: p0.z };
+        state.view3d.dragPlaneY = p0.y;
+        state.view3d.axisBase = { x: p0.x, y: p0.y, z: p0.z };
+        state.view3d.axisDir =
+          gizmoMode === "axis_x" ? { x: 1, y: 0, z: 0 } :
+          gizmoMode === "axis_y" ? { x: 0, y: 1, z: 0 } :
+          { x: 0, y: 0, z: 1 };
+        const ray = getCameraRay(sx, sy);
+        state.view3d.axisGrabT = solveAxisParamFromRay(ray, state.view3d.axisBase, state.view3d.axisDir);
+        state.view3d.lastX = e.clientX;
+        state.view3d.lastY = e.clientY;
+        refreshPointInputs();
+        renderPointList();
+        drawAll();
+        return;
+      }
+
+      if (idx >= 0) {
+        pushUndoState();
+        state.view3d.dragUndoPushed3d = true;
+        selectPoint(idx, false);
+        state.view3d.draggingPoint = true;
+        state.view3d.dragPointIdx = idx;
+        state.view3d.dragMode = e.shiftKey ? "y" : "plane";
+        const p0 = parsePos(state.points[idx]);
+        state.view3d.dragPlaneY = p0.y;
+        state.view3d.dragStart = { x: p0.x, y: p0.y, z: p0.z };
+        state.view3d.lastX = e.clientX;
+        state.view3d.lastY = e.clientY;
+        return;
+      }
+
+      const baseY = state.selectedIdx >= 0 ? parsePos(state.points[state.selectedIdx]).y : 0;
+      const ray = getCameraRay(sx, sy);
+      const hit = intersectRayPlaneY(ray, baseY);
+      if (hit) {
+        addPointAt(hit.x, hit.z);
+        const newestIdx = state.points.length - 1;
+        const newEl = state.points[newestIdx];
+        selectPoint(newestIdx, false);
+        state.view3d.draggingPoint = true;
+        state.view3d.dragPointIdx = newestIdx;
+        state.view3d.dragMode = "plane";
+        const p0 = parsePos(newEl);
+        state.view3d.dragPlaneY = p0.y;
+        state.view3d.dragStart = { x: p0.x, y: p0.y, z: p0.z };
+        state.view3d.lastX = e.clientX;
+        state.view3d.lastY = e.clientY;
+      }
+    });
+
+    ui.canvas3d.addEventListener("wheel", (e) => {
+      e.preventDefault();
+      const delta = Math.sign(e.deltaY);
+      state.view3d.distance = Math.max(2, state.view3d.distance * (delta > 0 ? 1.08 : 0.92));
+      draw3d();
+    }, { passive: false });
+
+    ui.canvas3d.addEventListener("mousemove", (e) => {
+      if (state.view3d.draggingPoint) return;
+      const rect = ui.canvas3d.getBoundingClientRect();
+      const sx = e.clientX - rect.left;
+      const sy = e.clientY - rect.top;
+      const hover = e.ctrlKey ? findGizmoAxisAt3d(sx, sy) : null;
+      if (hover !== state.view3d.hoverAxisMode) {
+        state.view3d.hoverAxisMode = hover;
+        draw3d();
+      }
+    });
+
+    ui.canvas3d.addEventListener("mouseleave", () => {
+      if (state.view3d.hoverAxisMode) {
+        state.view3d.hoverAxisMode = null;
+        draw3d();
+      }
+    });
+
+    window.addEventListener("mousemove", (e) => {
+      if (state.draggingIdx >= 0) {
+        const rect = ui.canvas2d.getBoundingClientRect();
+        const sx = e.clientX - rect.left;
+        const sy = e.clientY - rect.top;
+        const w = screenToWorld(sx, sy);
+        const snap = Math.max(0, Number(ui.snapInput.value) || 0);
+        let x = w.x + state.dragOffset.x;
+        let z = w.z + state.dragOffset.z;
+        if (snap > 0) {
+          x = Math.round(x / snap) * snap;
+          z = Math.round(z / snap) * snap;
+        }
+        const el = state.points[state.draggingIdx];
+        const p = parsePos(el);
+        const clamped = clampToRoom(x, p.y, z);
+        setPos(el, clamped.x, clamped.y, clamped.z);
+        refreshPointInputs();
+        drawAll();
+      }
+
+      if (state.view3d.draggingPoint && state.view3d.dragPointIdx >= 0) {
+        const el = state.points[state.view3d.dragPointIdx];
+        const p = parsePos(el);
+        if (state.view3d.dragMode === "y") {
+          const dy = e.clientY - state.view3d.lastY;
+          state.view3d.lastY = e.clientY;
+          state.view3d.lastX = e.clientX;
+          const speed = Math.max(0.0025, state.view3d.distance / 1200);
+          let y = p.y - dy * speed;
+          const snap = Math.max(0, Number(ui.snapInput.value) || 0);
+          if (snap > 0) y = Math.round(y / snap) * snap;
+          const clamped = clampToRoom(p.x, y, p.z);
+          setPos(el, clamped.x, clamped.y, clamped.z);
+          state.view3d.dragPlaneY = clamped.y;
+        } else if (
+          (state.view3d.dragMode === "axis_x" || state.view3d.dragMode === "axis_y" || state.view3d.dragMode === "axis_z") &&
+          state.view3d.axisBase &&
+          state.view3d.axisDir
+        ) {
+          const rect = ui.canvas3d.getBoundingClientRect();
+          const sx = e.clientX - rect.left;
+          const sy = e.clientY - rect.top;
+          const ray = getCameraRay(sx, sy);
+          const axisT = solveAxisParamFromRay(ray, state.view3d.axisBase, state.view3d.axisDir);
+          const delta = axisT - state.view3d.axisGrabT;
+          const target = {
+            x: state.view3d.dragStart.x + state.view3d.axisDir.x * delta,
+            y: state.view3d.dragStart.y + state.view3d.axisDir.y * delta,
+            z: state.view3d.dragStart.z + state.view3d.axisDir.z * delta
+          };
+          const clamped = clampToRoom(target.x, target.y, target.z);
+          setPos(el, clamped.x, clamped.y, clamped.z);
+          state.view3d.dragPlaneY = clamped.y;
+        } else {
+          const rect = ui.canvas3d.getBoundingClientRect();
+          const sx = e.clientX - rect.left;
+          const sy = e.clientY - rect.top;
+          const ray = getCameraRay(sx, sy);
+          const hit = intersectRayPlaneY(ray, state.view3d.dragPlaneY);
+          if (!hit) return;
+          const snap = Math.max(0, Number(ui.snapInput.value) || 0);
+          let x = hit.x;
+          let z = hit.z;
+          if (snap > 0) {
+            x = Math.round(x / snap) * snap;
+            z = Math.round(z / snap) * snap;
+          }
+          const clamped = clampToRoom(x, state.view3d.dragPlaneY, z);
+          setPos(el, clamped.x, clamped.y, clamped.z);
+        }
+        refreshPointInputs();
+        drawAll();
+      }
+
+      if (state.view3d.draggingCamera) {
+        const dx = e.clientX - state.view3d.lastX;
+        const dy = e.clientY - state.view3d.lastY;
+        state.view3d.lastX = e.clientX;
+        state.view3d.lastY = e.clientY;
+        state.view3d.yaw += dx * 0.01;
+        state.view3d.pitch += dy * 0.01;
+        state.view3d.pitch = Math.max(-1.35, Math.min(1.35, state.view3d.pitch));
+        draw3d();
+      }
+    });
+
+    window.addEventListener("mouseup", () => {
+      state.draggingIdx = -1;
+      state.dragUndoPushed2d = false;
+      state.view3d.draggingCamera = false;
+      state.view3d.draggingPoint = false;
+      state.view3d.dragUndoPushed3d = false;
+      state.view3d.dragPointIdx = -1;
+      state.view3d.dragMode = "plane";
+      state.view3d.dragStart = null;
+      state.view3d.axisBase = null;
+      state.view3d.axisDir = null;
+      state.view3d.axisGrabT = 0;
+      state.view3d.hoverAxisMode = null;
+      renderPointList();
+    });
+
+    window.addEventListener("keydown", (e) => {
+      if (e.key === "Escape" && ui.imageModal.classList.contains("open")) {
+        closeImageOverlay();
+        return;
+      }
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "z") {
+        e.preventDefault();
+        undoLast();
+      } else if (e.key === "Delete") {
+        deleteSelectedPoint();
+      } else if (e.key === "Control") {
+        draw3d();
+      }
+    });
+
+    window.addEventListener("keyup", (e) => {
+      if (e.key === "Control" && state.view3d.hoverAxisMode) {
+        state.view3d.hoverAxisMode = null;
+        draw3d();
+      }
+    });
+
+    window.addEventListener("resize", resizeCanvas);
+    setSidebarMode("list");
+    resizeCanvas();
+    setStatus("Loading built-in merged list...");
+    loadDefaultMergedFile().catch((err) => {
+      setStatus(`Default load error: ${err.message}`);
+    });
+  </script>
+</body>
+</html>
