@@ -511,6 +511,18 @@
   <script src="mapgroup-object-links.js"></script>
   <script>
     const DEFAULT_MAPGROUP_FILE = "mapgroupproto-merged.xml";
+    const ROOM_DIMENSION_PRESETS = {
+      land_shed_m1: {
+        width: 3.82,
+        height: 4.86,
+        depth: 3.40
+      },
+      land_prison_main: {
+        width: 40.20,
+        height: 39.50,
+        depth: 47.46
+      }
+    };
 
     const state = {
       xmlDoc: null,
@@ -610,6 +622,19 @@
 
     function setStatus(message) {
       ui.status.textContent = message;
+    }
+
+    function applyRoomPresetForCurrentGroup() {
+      const groupName = (state.currentGroup?.getAttribute("name") || "").trim().toLowerCase();
+      const preset = groupName ? ROOM_DIMENSION_PRESETS[groupName] : null;
+      if (!preset) return;
+      state.room.width = Math.max(1, Number(preset.width) || state.room.width);
+      state.room.height = Math.max(1, Number(preset.height) || state.room.height);
+      state.room.depth = Math.max(1, Number(preset.depth) || state.room.depth);
+      ui.roomWidthInput.value = String(state.room.width.toFixed(2));
+      ui.roomHeightInput.value = String(state.room.height.toFixed(2));
+      ui.roomDepthInput.value = String(state.room.depth.toFixed(2));
+      setStatus(`Applied room preset for ${state.currentGroup.getAttribute("name")} (${state.room.width.toFixed(2)} x ${state.room.height.toFixed(2)} x ${state.room.depth.toFixed(2)}).`);
     }
 
     function renderPointList() {
@@ -1109,6 +1134,58 @@
       ctx3d.stroke();
     }
 
+    function drawLabel3d(p, text, color = "#2b4f67") {
+      const s = project3d(p);
+      if (!s) return;
+      ctx3d.save();
+      ctx3d.font = "12px Trebuchet MS, Segoe UI, sans-serif";
+      ctx3d.textAlign = "center";
+      ctx3d.textBaseline = "middle";
+      const w = Math.ceil(ctx3d.measureText(text).width) + 8;
+      const h = 18;
+      ctx3d.fillStyle = "rgba(255,255,255,0.86)";
+      ctx3d.strokeStyle = "rgba(120,132,142,0.55)";
+      ctx3d.lineWidth = 1;
+      ctx3d.fillRect(s.x - w / 2, s.y - h / 2, w, h);
+      ctx3d.strokeRect(s.x - w / 2, s.y - h / 2, w, h);
+      ctx3d.fillStyle = color;
+      ctx3d.fillText(text, s.x, s.y + 0.5);
+      ctx3d.restore();
+    }
+
+    function drawSizeReferenceOutsideBox(x0, x1, y0, y1, z0, z1) {
+      const spanX = Math.abs(x1 - x0);
+      const spanZ = Math.abs(z1 - z0);
+      const spanY = Math.abs(y1 - y0);
+      const offset = Math.max(0.4, Math.min(spanX, spanZ) * 0.08);
+      const c = "rgba(56,90,118,0.86)";
+      const tick = "rgba(56,90,118,0.66)";
+      const rx = x1 + offset;
+      const rz = z1 + offset;
+
+      drawLine3d({ x: x0, y: y0, z: rz }, { x: x1, y: y0, z: rz }, c, 2);
+      drawLine3d({ x: x0, y: y0 - offset * 0.18, z: rz }, { x: x0, y: y0 + offset * 0.18, z: rz }, tick, 1.4);
+      drawLine3d({ x: x1, y: y0 - offset * 0.18, z: rz }, { x: x1, y: y0 + offset * 0.18, z: rz }, tick, 1.4);
+
+      drawLine3d({ x: rx, y: y0, z: z0 }, { x: rx, y: y0, z: z1 }, c, 2);
+      drawLine3d({ x: rx, y: y0 - offset * 0.18, z: z0 }, { x: rx, y: y0 + offset * 0.18, z: z0 }, tick, 1.4);
+      drawLine3d({ x: rx, y: y0 - offset * 0.18, z: z1 }, { x: rx, y: y0 + offset * 0.18, z: z1 }, tick, 1.4);
+
+      drawLine3d({ x: rx, y: y0, z: rz }, { x: rx, y: y1, z: rz }, c, 2);
+      const height = Math.max(0, y1 - y0);
+      const step = 1;
+      for (let t = step; t < height; t += step) {
+        const y = y0 + t;
+        drawLine3d({ x: rx - offset * 0.2, y, z: rz }, { x: rx + offset * 0.2, y, z: rz }, tick, 1.2);
+      }
+      drawLine3d({ x: rx - offset * 0.22, y: y0, z: rz }, { x: rx + offset * 0.22, y: y0, z: rz }, tick, 1.4);
+      drawLine3d({ x: rx - offset * 0.22, y: y1, z: rz }, { x: rx + offset * 0.22, y: y1, z: rz }, tick, 1.4);
+
+      drawLabel3d({ x: (x0 + x1) * 0.5, y: y0 + offset * 0.35, z: rz }, `X ${spanX.toFixed(2)}m`);
+      drawLabel3d({ x: rx, y: y0 + offset * 0.35, z: (z0 + z1) * 0.5 }, `Z ${spanZ.toFixed(2)}m`);
+      drawLabel3d({ x: rx + offset * 0.55, y: (y0 + y1) * 0.5, z: rz }, `Y ${spanY.toFixed(2)}m`);
+    }
+
     function fillTri3d(a, b, c, color) {
       const pa = project3d(a);
       const pb = project3d(b);
@@ -1218,6 +1295,8 @@
         drawLine3d({ x: x1, y: y0, z: z0 }, { x: x1, y: y1, z: z0 }, "rgba(120,132,142,0.5)", 1);
         drawLine3d({ x: x1, y: y0, z: z1 }, { x: x1, y: y1, z: z1 }, "rgba(120,132,142,0.5)", 1);
         drawLine3d({ x: x0, y: y0, z: z1 }, { x: x0, y: y1, z: z1 }, "rgba(120,132,142,0.5)", 1);
+
+        drawSizeReferenceOutsideBox(x0, x1, y0, y1, z0, z1);
       }
 
       const floorY = Math.min(0, state.view.minY);
@@ -1391,6 +1470,7 @@
 
     function buildContainerList() {
       const containers = state.currentGroup ? Array.from(state.currentGroup.querySelectorAll("container")) : [];
+      applyRoomPresetForCurrentGroup();
       ui.containerSelect.innerHTML = "";
       containers.forEach((container, idx) => {
         const option = document.createElement("option");
