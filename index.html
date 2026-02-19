@@ -1303,6 +1303,39 @@
       drawLabel3d({ x: rx + offset * 0.55, y: (y0 + y1) * 0.5, z: rz }, `Y ${spanY.toFixed(2)}m`);
     }
 
+    function drawFixedScaleBackdrop(centerX, centerY, centerZ) {
+      const half = 10; // 20m fixed reference plate
+      const x0 = centerX - half;
+      const x1 = centerX + half;
+      const z0 = centerZ - half;
+      const z1 = centerZ + half;
+      const y = centerY;
+      const steps = 20;
+      for (let i = 0; i <= steps; i++) {
+        const t = i / steps;
+        const x = x0 + (x1 - x0) * t;
+        const z = z0 + (z1 - z0) * t;
+        const major = i % 5 === 0;
+        drawLine3d(
+          { x, y, z: z0 },
+          { x, y, z: z1 },
+          major ? "rgba(138,152,165,0.34)" : "rgba(138,152,165,0.16)",
+          major ? 1.2 : 1
+        );
+        drawLine3d(
+          { x: x0, y, z },
+          { x: x1, y, z },
+          major ? "rgba(138,152,165,0.34)" : "rgba(138,152,165,0.16)",
+          major ? 1.2 : 1
+        );
+      }
+      drawLine3d({ x: x0, y, z: z0 }, { x: x1, y, z: z0 }, "rgba(120,136,149,0.5)", 1.4);
+      drawLine3d({ x: x1, y, z: z0 }, { x: x1, y, z: z1 }, "rgba(120,136,149,0.5)", 1.4);
+      drawLine3d({ x: x1, y, z: z1 }, { x: x0, y, z: z1 }, "rgba(120,136,149,0.5)", 1.4);
+      drawLine3d({ x: x0, y, z: z1 }, { x: x0, y, z: z0 }, "rgba(120,136,149,0.5)", 1.4);
+      drawLabel3d({ x: centerX, y: y + 0.04, z: z1 + 0.75 }, "Fixed scale: 20m x 20m", "#486277");
+    }
+
     function fillTri3d(a, b, c, color) {
       const pa = project3d(a);
       const pb = project3d(b);
@@ -1365,6 +1398,12 @@
       drawLine3d({ x: -axis, y: 0, z: 0 }, { x: axis, y: 0, z: 0 }, "#bd6d53", 1.4);
       drawLine3d({ x: 0, y: -axis, z: 0 }, { x: 0, y: axis, z: 0 }, "#678d4f", 1.4);
       drawLine3d({ x: 0, y: 0, z: -axis }, { x: 0, y: 0, z: axis }, "#4a7396", 1.4);
+
+      drawFixedScaleBackdrop(
+        state.room.centerX,
+        state.room.floorY - Math.max(state.room.height * 1.35, 7),
+        state.room.centerZ
+      );
 
       if (state.room.enabled && !useObjectDimsVisual) {
         const hw = state.room.width * 0.5;
