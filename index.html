@@ -137,6 +137,16 @@
       font-size: 13px;
       color: var(--muted);
     }
+    .canvas-head-right {
+      display: flex;
+      gap: 12px;
+      align-items: center;
+      justify-content: flex-end;
+    }
+    #objectDims {
+      color: #3f5c6f;
+      font-weight: 600;
+    }
     .canvas-grid {
       display: grid;
       grid-template-columns: 1fr 340px;
@@ -455,6 +465,9 @@
           <label><input id="roomEnabledInput" type="checkbox" checked> Show room context</label>
           <label><input id="roomClampInput" type="checkbox" checked> Clamp edits to room bounds</label>
         </div>
+        <div class="split-2">
+          <label><input id="objectDimsVisualInput" type="checkbox"> Show object dimensions visual (instead of room box)</label>
+        </div>
       </div>
 
       <div class="row btn-row">
@@ -473,7 +486,10 @@
     <section class="canvas-panel">
       <div class="canvas-head">
         <strong id="canvasTitle">No container selected</strong>
-        <span id="pointCount">0 points</span>
+        <div class="canvas-head-right">
+          <span id="objectDims"></span>
+          <span id="pointCount">0 points</span>
+        </div>
       </div>
       <div class="canvas-grid" id="canvasGrid">
         <canvas id="canvas3d"></canvas>
@@ -508,10 +524,12 @@
   </div>
 
   <script src="mapgroupproto-merged.js"></script>
+  <script src="mapgroup-bbox-presets.js"></script>
   <script src="mapgroup-object-links.js"></script>
   <script>
     const DEFAULT_MAPGROUP_FILE = "mapgroupproto-merged.xml";
     const ROOM_DIMENSION_PRESETS = {
+      ...(window.MAPGROUP_BBOX_PRESETS?.presets || {}),
       land_shed_m1: {
         width: 3.82,
         height: 4.86,
@@ -521,6 +539,14 @@
         width: 40.20,
         height: 39.50,
         depth: 47.46
+      },
+      land_factory_lathes: {
+        min: [-19.80, -8.10, -9.34],
+        max: [18.57, 8.12, 12.66]
+      },
+      factory_lathes: {
+        min: [-19.80, -8.10, -9.34],
+        max: [18.57, 8.12, 12.66]
       }
     };
 
@@ -532,6 +558,8 @@
       points: [],
       sidebarMode: "list",
       filteredGroupIndices: [],
+      objectDims: null,
+      objectDimsAxisSwapXZ: false,
       undoStack: [],
       selectedIdx: -1,
       draggingIdx: -1,
@@ -548,6 +576,7 @@
         centerX: 0,
         centerZ: 0
       },
+      showObjectDimsVisual: false,
       view3d: {
         yaw: -0.9,
         pitch: -0.95,
@@ -607,6 +636,7 @@
       roomDepthInput: document.getElementById("roomDepthInput"),
       roomEnabledInput: document.getElementById("roomEnabledInput"),
       roomClampInput: document.getElementById("roomClampInput"),
+      objectDimsVisualInput: document.getElementById("objectDimsVisualInput"),
       exportPointsBtn: document.getElementById("exportPointsBtn"),
       downloadXmlBtn: document.getElementById("downloadXmlBtn"),
       outputText: document.getElementById("outputText"),
@@ -615,6 +645,7 @@
       canvas2d: document.getElementById("canvas2d"),
       canvas3d: document.getElementById("canvas3d"),
       canvasTitle: document.getElementById("canvasTitle"),
+      objectDims: document.getElementById("objectDims"),
       pointCount: document.getElementById("pointCount")
     };
     const ctx2d = ui.canvas2d.getContext("2d");
@@ -624,16 +655,102 @@
       ui.status.textContent = message;
     }
 
+    function dimsFromMinMax(min, max) {
+      if (!Array.isArray(min) || !Array.isArray(max) || min.length < 3 || max.length < 3) return null;
+      return {
+        width: Math.abs(Number(max[0]) - Number(min[0])),
+        height: Math.abs(Number(max[1]) - Number(min[1])),
+        depth: Math.abs(Number(max[2]) - Number(min[2]))
+      };
+    }
+
+    function updateObjectDimsLabel() {
+      if (!state.objectDims) {
+        ui.objectDims.textContent = "";
+        return;
+      }
+      const orient = state.objectDimsAxisSwapXZ ? " (XZ swapped)" : "";
+      ui.objectDims.textContent = `Object dims X:${state.objectDims.width.toFixed(2)} Y:${state.objectDims.height.toFixed(2)} Z:${state.objectDims.depth.toFixed(2)}m${orient}`;
+    }
+
+    function getGroupPointSpreadXZ(groupEl) {
+      if (!groupEl) return null;
+      const points = Array.from(groupEl.querySelectorAll("point"));
+      if (points.length < 4) return null;
+      let minX = Infinity, maxX = -Infinity;
+      let minZ = Infinity, maxZ = -Infinity;
+      points.forEach((p) => {
+        const pos = (p.getAttribute("pos") || "").trim().split(/\s+/).map(Number);
+        if (pos.length < 3 || !Number.isFinite(pos[0]) || !Number.isFinite(pos[2])) return;
+        minX = Math.min(minX, pos[0]);
+        maxX = Math.max(maxX, pos[0]);
+        minZ = Math.min(minZ, pos[2]);
+        maxZ = Math.max(maxZ, pos[2]);
+      });
+      if (!Number.isFinite(minX) || !Number.isFinite(minZ)) return null;
+      return {
+        x: Math.max(0.001, maxX - minX),
+        z: Math.max(0.001, maxZ - minZ)
+      };
+    }
+
+    function dimsErrorAgainstSpread(spread, dims) {
+      const logErr = (a, b) => Math.abs(Math.log(Math.max(0.001, a) / Math.max(0.001, b)));
+      return logErr(spread.x, dims.width) + logErr(spread.z, dims.depth);
+    }
+
+    function resolveDimsOrientationForGroup(groupEl, dimsAsIs, dimsSwapped) {
+      const spread = getGroupPointSpreadXZ(groupEl);
+      if (!spread) return { dims: dimsSwapped, swapped: true };
+      const errAs = dimsErrorAgainstSpread(spread, dimsAsIs);
+      const errSw = dimsErrorAgainstSpread(spread, dimsSwapped);
+      if (errAs + 0.05 < errSw) return { dims: dimsAsIs, swapped: false };
+      return { dims: dimsSwapped, swapped: true };
+    }
+
     function applyRoomPresetForCurrentGroup() {
       const groupName = (state.currentGroup?.getAttribute("name") || "").trim().toLowerCase();
       const preset = groupName ? ROOM_DIMENSION_PRESETS[groupName] : null;
-      if (!preset) return;
-      state.room.width = Math.max(1, Number(preset.width) || state.room.width);
-      state.room.height = Math.max(1, Number(preset.height) || state.room.height);
-      state.room.depth = Math.max(1, Number(preset.depth) || state.room.depth);
+      if (!preset) {
+        state.objectDims = null;
+        state.objectDimsAxisSwapXZ = false;
+        updateObjectDimsLabel();
+        return;
+      }
+      let dims = preset.min && preset.max
+        ? dimsFromMinMax(preset.min, preset.max)
+        : {
+            width: Number(preset.width),
+            height: Number(preset.height),
+            depth: Number(preset.depth)
+          };
+      if (!dims) {
+        state.objectDims = null;
+        state.objectDimsAxisSwapXZ = false;
+        updateObjectDimsLabel();
+        return;
+      }
+      if (preset.min && preset.max) {
+        const dimsAsIs = { width: dims.width, height: dims.height, depth: dims.depth };
+        const dimsSwapped = { width: dims.depth, height: dims.height, depth: dims.width };
+        const oriented = resolveDimsOrientationForGroup(state.currentGroup, dimsAsIs, dimsSwapped);
+        dims = oriented.dims;
+        state.objectDimsAxisSwapXZ = oriented.swapped;
+      } else {
+        state.objectDimsAxisSwapXZ = false;
+      }
+      state.room.width = Math.max(1, Number(dims.width) || state.room.width);
+      state.room.height = Math.max(1, Number(dims.height) || state.room.height);
+      state.room.depth = Math.max(1, Number(dims.depth) || state.room.depth);
+      state.objectDims = {
+        width: state.room.width,
+        height: state.room.height,
+        depth: state.room.depth
+      };
       ui.roomWidthInput.value = String(state.room.width.toFixed(2));
       ui.roomHeightInput.value = String(state.room.height.toFixed(2));
       ui.roomDepthInput.value = String(state.room.depth.toFixed(2));
+      updateObjectDimsLabel();
       setStatus(`Applied room preset for ${state.currentGroup.getAttribute("name")} (${state.room.width.toFixed(2)} x ${state.room.height.toFixed(2)} x ${state.room.depth.toFixed(2)}).`);
     }
 
@@ -1237,6 +1354,7 @@
       const w = ui.canvas3d.clientWidth;
       const h = ui.canvas3d.clientHeight;
       ctx3d.clearRect(0, 0, w, h);
+      const useObjectDimsVisual = state.showObjectDimsVisual && !!state.objectDims;
 
       const span = Math.max(
         state.view.maxX - state.view.minX,
@@ -1248,7 +1366,7 @@
       drawLine3d({ x: 0, y: -axis, z: 0 }, { x: 0, y: axis, z: 0 }, "#678d4f", 1.4);
       drawLine3d({ x: 0, y: 0, z: -axis }, { x: 0, y: 0, z: axis }, "#4a7396", 1.4);
 
-      if (state.room.enabled) {
+      if (state.room.enabled && !useObjectDimsVisual) {
         const hw = state.room.width * 0.5;
         const hd = state.room.depth * 0.5;
         const x0 = state.room.centerX - hw;
@@ -1295,6 +1413,34 @@
         drawLine3d({ x: x1, y: y0, z: z0 }, { x: x1, y: y1, z: z0 }, "rgba(120,132,142,0.5)", 1);
         drawLine3d({ x: x1, y: y0, z: z1 }, { x: x1, y: y1, z: z1 }, "rgba(120,132,142,0.5)", 1);
         drawLine3d({ x: x0, y: y0, z: z1 }, { x: x0, y: y1, z: z1 }, "rgba(120,132,142,0.5)", 1);
+
+        drawSizeReferenceOutsideBox(x0, x1, y0, y1, z0, z1);
+      }
+
+      if (useObjectDimsVisual) {
+        const hw = state.objectDims.width * 0.5;
+        const hd = state.objectDims.depth * 0.5;
+        const x0 = state.room.centerX - hw;
+        const x1 = state.room.centerX + hw;
+        const z0 = state.room.centerZ - hd;
+        const z1 = state.room.centerZ + hd;
+        const y0 = state.room.floorY;
+        const y1 = state.room.floorY + state.objectDims.height;
+        const line = "rgba(74,122,158,0.9)";
+        const edge = "rgba(98,145,182,0.75)";
+
+        drawLine3d({ x: x0, y: y0, z: z0 }, { x: x1, y: y0, z: z0 }, line, 1.7);
+        drawLine3d({ x: x1, y: y0, z: z0 }, { x: x1, y: y0, z: z1 }, line, 1.7);
+        drawLine3d({ x: x1, y: y0, z: z1 }, { x: x0, y: y0, z: z1 }, line, 1.7);
+        drawLine3d({ x: x0, y: y0, z: z1 }, { x: x0, y: y0, z: z0 }, line, 1.7);
+        drawLine3d({ x: x0, y: y1, z: z0 }, { x: x1, y: y1, z: z0 }, edge, 1.5);
+        drawLine3d({ x: x1, y: y1, z: z0 }, { x: x1, y: y1, z: z1 }, edge, 1.5);
+        drawLine3d({ x: x1, y: y1, z: z1 }, { x: x0, y: y1, z: z1 }, edge, 1.5);
+        drawLine3d({ x: x0, y: y1, z: z1 }, { x: x0, y: y1, z: z0 }, edge, 1.5);
+        drawLine3d({ x: x0, y: y0, z: z0 }, { x: x0, y: y1, z: z0 }, edge, 1.4);
+        drawLine3d({ x: x1, y: y0, z: z0 }, { x: x1, y: y1, z: z0 }, edge, 1.4);
+        drawLine3d({ x: x1, y: y0, z: z1 }, { x: x1, y: y1, z: z1 }, edge, 1.4);
+        drawLine3d({ x: x0, y: y0, z: z1 }, { x: x0, y: y1, z: z1 }, edge, 1.4);
 
         drawSizeReferenceOutsideBox(x0, x1, y0, y1, z0, z1);
       }
@@ -1461,6 +1607,8 @@
       } else {
         state.currentGroup = null;
         state.currentContainer = null;
+        state.objectDims = null;
+        updateObjectDimsLabel();
         ui.containerSelect.innerHTML = "";
         ui.canvasTitle.textContent = "No matching group";
         renderObjectPreview();
@@ -1637,6 +1785,10 @@
     });
     ui.roomClampInput.addEventListener("change", () => {
       state.room.clamp = ui.roomClampInput.checked;
+      draw3d();
+    });
+    ui.objectDimsVisualInput.addEventListener("change", () => {
+      state.showObjectDimsVisual = ui.objectDimsVisualInput.checked;
       draw3d();
     });
     ui.exportPointsBtn.addEventListener("click", exportContainerPoints);
